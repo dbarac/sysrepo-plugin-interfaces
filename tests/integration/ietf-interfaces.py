@@ -52,14 +52,23 @@ class InterfacesTestCase(unittest.TestCase):
             data = ctx.parse_data_mem(data, "xml", config=True, strict=True)
             self.session.replace_config_ly(data, "ietf-interfaces")
 
-    def edit_config(self, path, config=True, strict=True, **kwargs):
+    def edit_config(self, path):
         ctx = self.conn.get_ly_ctx()
 
         with open(path, "r") as f:
             data = f.read()
-            data = ctx.parse_data_mem(data, "xml", config=config, strict=strict, **kwargs)
+            data = ctx.parse_data_mem(data, "xml", config=True, strict=True)
             self.session.edit_batch_ly(data)
             data.free()
+
+        self.session.apply_changes()
+
+    def edit_config_mem(self, data, **parser_flags):
+        ctx = self.conn.get_ly_ctx()
+
+        data = ctx.parse_data_mem(data, "xml", **parser_flags)
+        self.session.edit_batch_ly(data)
+        data.free()
 
         self.session.apply_changes()
 
@@ -194,15 +203,20 @@ class IpTestCase(InterfacesTestCase):
         enabled before running this test.
         """
 
-        parent_interface = os.environ.get('SYSREPO_PLUGIN_INTERFACES_PARENT_INTERFACE')
-        if parent_interface is None:
-            self.fail("SYSREPO_PLUGIN_INTERFACES_PARENT_INTERFACE has to be set to create a subinterface")
+        # select a parent interface
+        all_interfaces = set(os.listdir('/sys/class/net/'))
+        parent_interface = None
+        for interface in all_interfaces:
+            p = subprocess.run(['ip', 'link', 'show', interface], capture_output=True, encoding="ascii")
+            if "link/ether" in p.stdout:
+                parent_interface = interface
+                break
+        self.assertIsNotNone(parent_interface, "no ethernet interfaces are available")
 
-        # substitute parent interface environment variable in the sample xml configuration
-        ret = os.system("envsubst < data/subinterface.xml.in > data/subinterface.xml")
-        self.assertTrue(ret == 0)
-
-        self.edit_config("data/subinterface.xml", config=False, edit=True)
+        with open("data/subinterface.xml", "r") as f:
+            data = f.read()
+            data = data.format(PARENT_INTERFACE=parent_interface)
+            self.edit_config_mem(data, edit=True, strict=True)
 
         expected_subinterface = \
         '<interfaces xmlns="urn:ietf:params:xml:ns:yang:ietf-interfaces"><interface>' \
