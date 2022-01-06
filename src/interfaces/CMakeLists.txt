@@ -4,6 +4,7 @@ project(sysrepo-plugin-interfaces C)
 set(SOURCES
     interfaces.c
     if_state.c
+    if_operational_state.c
     link_data.c
     ip_data.c
     ipv6_data.c
